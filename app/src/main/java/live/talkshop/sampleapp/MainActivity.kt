@@ -31,6 +31,9 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import live.talkshop.sampleapp.ui.theme.SampleAppTheme
+import live.talkshop.sdk.core.authentication.TalkShopLive
+import live.talkshop.sdk.core.show.Show
+import live.talkshop.sdk.core.show.models.ShowObject
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
