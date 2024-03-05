@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -25,18 +26,17 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import live.talkshop.sampleapp.ui.theme.SampleAppTheme
 import live.talkshop.sdk.core.authentication.TalkShopLive
+import live.talkshop.sdk.core.chat.Chat
 import live.talkshop.sdk.core.show.Show
-import live.talkshop.sdk.core.show.models.ShowModel
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -64,7 +64,7 @@ fun MainScreen(context: Context) {
     ) {
         ClientKeyInputSection(context)
         ShowIdInputSection()
-        CreateUserInputSection(context)
+        CreateUserInputSection()
     }
 }
 
@@ -118,8 +118,9 @@ fun ClientKeyInputSection(context: Context) {
 @Composable
 fun ShowIdInputSection() {
     var showId by remember { mutableStateOf("") }
-    var showDetails by remember { mutableStateOf<ShowModel?>(null) }
+    var showDetails by remember { mutableStateOf<String?>(null) }
     var errorText by remember { mutableStateOf<String?>(null) }
+    val coroutineScope = rememberCoroutineScope()
 
     OutlinedTextField(
         value = showId,
@@ -130,32 +131,60 @@ fun ShowIdInputSection() {
 
     Spacer(modifier = Modifier.height(16.dp))
 
-    Button(
-        onClick = {
-            CoroutineScope(Dispatchers.IO).launch {
-                try {
-                    Show.getDetails(showId, object : Show.GetDetailsCallback {
-                        override fun onSuccess(showModel: ShowModel) {
-                            showDetails = showModel
+    Row {
+        Button(
+            onClick = {
+                coroutineScope.launch {
+                    Show.getDetails(showId) { error, show ->
+                        if (error == null && show != null) {
+                            showDetails =
+                                "ID: ${show.id}, " +
+                                        "\nName: ${show.name}, " +
+                                        "\nDescription: ${show.description}, " +
+                                        "\nStatus: ${show.status}, " +
+                                        "\nTrailer URL: ${show.trailerUrl}, " +
+                                        "\nHLS URL: ${show.hlsUrl}, " +
+                                        "\nHLS Playback URL: ${show.hlsPlaybackUrl}"
                             errorText = null
-                        }
-
-                        override fun onError(error: String) {
+                        } else {
                             errorText = error
                             showDetails = null
                         }
-                    })
-                } catch (e: Exception) {
-                    errorText = e.message ?: "Unknown error occurred"
-                    showDetails = null
-                }
-            }
-        },
-        modifier = Modifier.wrapContentWidth(Alignment.End)
-    ) {
-        Text("Fetch Show Details")
-    }
 
+                    }
+                }
+            },
+            modifier = Modifier.wrapContentWidth(Alignment.End)
+        ) {
+            Text("Fetch Show Details")
+        }
+
+        Spacer(modifier = Modifier.width(5.dp))
+
+        Button(
+            onClick = {
+                coroutineScope.launch {
+                    Show.getStatus(showId) { error, show ->
+                        if (error == null && show != null) {
+                            showDetails = "Show Key: ${show.showKey}, " +
+                                    "\nShow Status: ${show.status}," +
+                                    "\nHLS Playback URL: ${show.hlsPlaybackUrl}," +
+                                    "\nHLS URL: ${show.hlsUrl}"
+                            errorText = null
+                        } else {
+                            errorText = error
+                            showDetails = null
+                        }
+
+                    }
+                }
+            },
+            modifier = Modifier.wrapContentWidth(Alignment.End)
+        ) {
+            Text("Fetch Show Status")
+        }
+
+    }
     Spacer(modifier = Modifier.height(8.dp))
 
     showDetails?.let { ShowDetails(it) }
@@ -163,18 +192,15 @@ fun ShowIdInputSection() {
 }
 
 @Composable
-fun ShowDetails(showModel: ShowModel) {
+fun ShowDetails(showDetails: String) {
     Column {
-        Text("id: ${showModel.id}")
-        Text("Name: ${showModel.name}")
-        Text("Description: ${showModel.description}")
-        Text("Status: ${showModel.status}")
+        Text(showDetails)
     }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun CreateUserInputSection(context: Context) {
+fun CreateUserInputSection() {
     var jwt by remember { mutableStateOf("") }
     var isGuest by remember { mutableStateOf(false) }
     var apiResult by remember { mutableStateOf<String?>(null) }
@@ -202,7 +228,7 @@ fun CreateUserInputSection(context: Context) {
     Button(
         onClick = {
             apiResult = null
-            TalkShopLive.Chat(context, jwt, isGuest) { errorMessage, userTokenModel ->
+            Chat(jwt, isGuest) { errorMessage, userTokenModel ->
                 apiResult = errorMessage ?: "Great success! UserId: ${userTokenModel?.userId}"
             }
         },
