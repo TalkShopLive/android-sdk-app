@@ -64,7 +64,8 @@ fun MainScreen(context: Context) {
     ) {
         ClientKeyInputSection(context)
         ShowIdInputSection()
-        CreateUserInputSection()
+        InitializeChat()
+        PublishMessage()
     }
 }
 
@@ -200,15 +201,25 @@ fun ShowDetails(showDetails: String) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun CreateUserInputSection() {
+fun InitializeChat() {
     var jwt by remember { mutableStateOf("") }
     var isGuest by remember { mutableStateOf(false) }
+    var showId by remember { mutableStateOf("") }  // Mutable state for showId
     var apiResult by remember { mutableStateOf<String?>(null) }
 
     OutlinedTextField(
         value = jwt,
         onValueChange = { jwt = it },
         label = { Text("JWT Token") },
+        modifier = Modifier.fillMaxWidth()
+    )
+
+    Spacer(modifier = Modifier.height(16.dp))
+
+    OutlinedTextField(
+        value = showId,
+        onValueChange = { showId = it },
+        label = { Text("Show ID") },
         modifier = Modifier.fillMaxWidth()
     )
 
@@ -228,18 +239,55 @@ fun CreateUserInputSection() {
     Button(
         onClick = {
             apiResult = null
-            Chat(jwt, isGuest) { errorMessage, userTokenModel ->
+            Chat(showId, jwt, isGuest) { errorMessage, userTokenModel ->
                 apiResult = errorMessage ?: "Great success! UserId: ${userTokenModel?.userId}"
             }
         },
         modifier = Modifier.wrapContentWidth(Alignment.End)
     ) {
-        Text("Create User")
+        Text("Initialize Chat")
     }
 
     Spacer(modifier = Modifier.height(16.dp))
 
     apiResult?.let {
         Text(it, color = if (it.startsWith("Great success")) Color.Green else Color.Red)
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun PublishMessage() {
+    var message by remember { mutableStateOf("") }
+    var apiResult by remember { mutableStateOf<String?>(null) }
+
+    OutlinedTextField(
+        value = message,
+        onValueChange = { message = it },
+        label = { Text("Message") },
+        modifier = Modifier.fillMaxWidth()
+    )
+
+    Spacer(modifier = Modifier.height(16.dp))
+
+    Button(
+        onClick = {
+            Chat.publish(message) { error, timetoken ->
+                apiResult = if (error == null) {
+                    "Message sent, timetoken: $timetoken"
+                } else {
+                    "Failed to send message: $error"
+                }
+            }
+        },
+        modifier = Modifier.wrapContentWidth(Alignment.End)
+    ) {
+        Text("Send Message")
+    }
+
+    Spacer(modifier = Modifier.height(16.dp))
+
+    apiResult?.let {
+        Text(it, color = if (!it.startsWith("Failed")) Color.Green else Color.Red)
     }
 }
