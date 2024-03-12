@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
@@ -36,6 +37,7 @@ import kotlinx.coroutines.launch
 import live.talkshop.sampleapp.ui.theme.SampleAppTheme
 import live.talkshop.sdk.core.authentication.TalkShopLive
 import live.talkshop.sdk.core.chat.Chat
+import live.talkshop.sdk.core.chat.models.MessageModel
 import live.talkshop.sdk.core.show.Show
 
 class MainActivity : ComponentActivity() {
@@ -62,17 +64,18 @@ fun MainScreen(context: Context) {
             .padding(16.dp)
             .verticalScroll(scrollState)
     ) {
-        ClientKeyInputSection(context)
-        ShowIdInputSection()
-        InitializeChat()
+        ClientKeyInputSection(context, "")
+        ShowIdInputSection("")
+        InitializeChat("", "")
         PublishMessage()
+        ChatHistory()
     }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ClientKeyInputSection(context: Context) {
-    var clientKey by remember { mutableStateOf("") }
+fun ClientKeyInputSection(context: Context, clientKeyString: String) {
+    var clientKey by remember { mutableStateOf(clientKeyString) }
     var initializationResult by remember { mutableStateOf<String?>(null) }
 
     OutlinedTextField(
@@ -117,15 +120,15 @@ fun ClientKeyInputSection(context: Context) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ShowIdInputSection() {
-    var showId by remember { mutableStateOf("") }
+fun ShowIdInputSection(showKeyString: String) {
+    var showKey by remember { mutableStateOf(showKeyString) }
     var showDetails by remember { mutableStateOf<String?>(null) }
     var errorText by remember { mutableStateOf<String?>(null) }
     val coroutineScope = rememberCoroutineScope()
 
     OutlinedTextField(
-        value = showId,
-        onValueChange = { showId = it },
+        value = showKey,
+        onValueChange = { showKey = it },
         label = { Text("Show ID") },
         modifier = Modifier.fillMaxWidth()
     )
@@ -136,7 +139,7 @@ fun ShowIdInputSection() {
         Button(
             onClick = {
                 coroutineScope.launch {
-                    Show.getDetails(showId) { error, show ->
+                    Show.getDetails(showKey) { error, show ->
                         if (error == null && show != null) {
                             showDetails =
                                 "ID: ${show.id}, " +
@@ -165,7 +168,7 @@ fun ShowIdInputSection() {
         Button(
             onClick = {
                 coroutineScope.launch {
-                    Show.getStatus(showId) { error, show ->
+                    Show.getStatus(showKey) { error, show ->
                         if (error == null && show != null) {
                             showDetails = "Show Key: ${show.showKey}, " +
                                     "\nShow Status: ${show.status}," +
@@ -201,10 +204,10 @@ fun ShowDetails(showDetails: String) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun InitializeChat() {
-    var jwt by remember { mutableStateOf("") }
+fun InitializeChat(jwtString: String, showKeyString: String) {
+    var jwt by remember { mutableStateOf(jwtString) }
     var isGuest by remember { mutableStateOf(false) }
-    var showId by remember { mutableStateOf("") }  // Mutable state for showId
+    var showKey by remember { mutableStateOf(showKeyString) }
     var apiResult by remember { mutableStateOf<String?>(null) }
 
     OutlinedTextField(
@@ -217,8 +220,8 @@ fun InitializeChat() {
     Spacer(modifier = Modifier.height(16.dp))
 
     OutlinedTextField(
-        value = showId,
-        onValueChange = { showId = it },
+        value = showKey,
+        onValueChange = { showKey = it },
         label = { Text("Show ID") },
         modifier = Modifier.fillMaxWidth()
     )
@@ -239,7 +242,7 @@ fun InitializeChat() {
     Button(
         onClick = {
             apiResult = null
-            Chat(showId, jwt, isGuest) { errorMessage, userTokenModel ->
+            Chat(showKey, jwt, isGuest) { errorMessage, userTokenModel ->
                 apiResult = errorMessage ?: "Great success! UserId: ${userTokenModel?.userId}"
             }
         },
@@ -260,6 +263,7 @@ fun InitializeChat() {
 fun PublishMessage() {
     var message by remember { mutableStateOf("") }
     var apiResult by remember { mutableStateOf<String?>(null) }
+    var subscriptionResult by remember { mutableStateOf("") }
 
     OutlinedTextField(
         value = message,
@@ -267,27 +271,89 @@ fun PublishMessage() {
         label = { Text("Message") },
         modifier = Modifier.fillMaxWidth()
     )
-
     Spacer(modifier = Modifier.height(16.dp))
-
-    Button(
-        onClick = {
-            Chat.publish(message) { error, timetoken ->
-                apiResult = if (error == null) {
-                    "Message sent, timetoken: $timetoken"
-                } else {
-                    "Failed to send message: $error"
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Button(
+            onClick = {
+                Chat.subscribe(object : Chat.ChatCallback {
+                    override fun onMessageReceived(message: MessageModel) {
+                        subscriptionResult = "Received message: ${message.text}"
+                    }
+                })
+            }
+        ) {
+            Text("Subscribe")
+        }
+        Spacer(modifier = Modifier.width(5.dp))
+        Button(
+            onClick = {
+                Chat.publish(message) { error, timetoken ->
+                    apiResult = if (error == null) {
+                        "Message sent, timetoken: $timetoken"
+                    } else {
+                        "Failed to send message: $error"
+                    }
                 }
             }
-        },
-        modifier = Modifier.wrapContentWidth(Alignment.End)
-    ) {
-        Text("Send Message")
+        ) {
+            Text("Send Message")
+        }
     }
 
     Spacer(modifier = Modifier.height(16.dp))
 
     apiResult?.let {
         Text(it, color = if (!it.startsWith("Failed")) Color.Green else Color.Red)
+    }
+
+    if (subscriptionResult.isNotEmpty()) {
+        Text(subscriptionResult, color = Color.Blue)
+    }
+}
+
+@Composable
+fun ChatHistory() {
+    var messages by remember { mutableStateOf<List<MessageModel>?>(null) }
+    var errorMessage by remember { mutableStateOf<String?>(null) }
+    var showPopup by remember { mutableStateOf(false) }
+
+    Button(
+        onClick = {
+            Chat.getChatMessages { messageList, _, error ->
+                if (error == null) {
+                    messages = messageList
+                } else {
+                    errorMessage = error
+                }
+                showPopup = true
+            }
+        }
+    ) {
+        Text("Get Chat History")
+    }
+
+    if (showPopup) {
+        AlertDialog(
+            onDismissRequest = { showPopup = false },
+            title = { Text("Chat History") },
+            text = {
+                if (messages != null) {
+                    Column {
+                        messages!!.forEach { message ->
+                            message.text?.let { Text(it) }
+                        }
+                    }
+                } else {
+                    Text(errorMessage ?: "Unknown error")
+                }
+            },
+            confirmButton = {
+                Button(onClick = { showPopup = false }) {
+                    Text("OK")
+                }
+            }
+        )
     }
 }
